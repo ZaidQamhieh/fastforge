@@ -78,14 +78,29 @@ def forgefast_components() -> dict:
     jars are missing, so this returns what it actually found.
     """
     repo = Path(__file__).resolve().parent.parent
+
+    # A `jars/` directory beside the launcher wins, so a release bundle works on a machine that has
+    # never built anything. The build-tree paths below are the developer fallback; without this the
+    # tool silently finds nothing on someone else's computer and launches stock Forge while still
+    # reporting success.
+    bundled = Path(__file__).resolve().parent / "jars"
+
+    def find(pattern: str, *fallbacks: Path) -> Path | None:
+        hit = sorted(bundled.glob(pattern)) if bundled.is_dir() else []
+        if hit:
+            return hit[-1]
+        return next((p for p in fallbacks if p.is_file()), None)
+
     fork = repo.parent / "files-pasted-by-the-user-forgefast" / "work" / "MinecraftForge"
-    forge_jar = (fork / "projects/forge/build/libs"
-                 / "forge-1.12.2-14.23.5.2860-forgefast.0.1.0-dev-universal.jar")
-    lw_jar = fork / "launchwrapper/build/libs/launchwrapper-1.12-forgefast.1.jar"
+    forge_jar = find("forge-1.12.2-*-forgefast*.jar",
+                     fork / "projects/forge/build/libs"
+                     / "forge-1.12.2-14.23.5.2860-forgefast.0.1.0-dev-universal.jar")
+    lw_jar = find("launchwrapper-*forgefast*.jar",
+                  fork / "launchwrapper/build/libs/launchwrapper-1.12-forgefast.1.jar")
     artifacts = {}
-    if forge_jar.is_file():
+    if forge_jar is not None:
         artifacts["forge-1.12.2"] = forge_jar
-    if lw_jar.is_file():
+    if lw_jar is not None:
         artifacts["launchwrapper-"] = lw_jar
 
     extra = []
@@ -93,22 +108,29 @@ def forgefast_components() -> dict:
     # and the bundled native engine all live here, not in the Forge fork. Without it on the classpath
     # the launcher would substitute two jars and silently deliver none of those -- which is exactly
     # the class of bug that left fastStitcher disabled for the project's whole history.
-    coremod = sorted(repo.glob("build/libs/forgefast-*.jar"))
+    coremod = sorted(bundled.glob("forgefast-*.jar")) if bundled.is_dir() else []
+    if not coremod:
+        coremod = sorted(repo.glob("build/libs/forgefast-*.jar"))
     coremod = [j for j in coremod if "sources" not in j.name and "javadoc" not in j.name]
     forgefast_jar = coremod[-1] if coremod else None
     if forgefast_jar is not None:
         extra.append(forgefast_jar)
 
     gradle = Path.home() / ".gradle/caches/modules-2/files-2.1"
-    for pattern in ("org.glavo/pack200/*/*/pack200-*.jar",
-                    "javax.annotation/javax.annotation-api/*/*/javax.annotation-api-*.jar"):
-        extra += sorted(gradle.glob(pattern))[:1]
+    for name, pattern in (("pack200-*.jar", "org.glavo/pack200/*/*/pack200-*.jar"),
+                          ("javax.annotation-api-*.jar",
+                           "javax.annotation/javax.annotation-api/*/*/javax.annotation-api-*.jar")):
+        local = sorted(bundled.glob(name)) if bundled.is_dir() else []
+        extra += local[:1] if local else sorted(gradle.glob(pattern))[:1]
 
     # commons-lang3 must be *replaced*, not appended. Stock 1.12.2 ships 3.5, whose SystemUtils
     # cannot parse a Java 26 version string and throws NullPointerException during startup. Adding a
     # newer jar does nothing because the old one appears earlier on the classpath. This is a hard
     # Java 26 requirement rather than an optimization: without it the pack does not boot.
-    newer_lang3 = sorted(gradle.glob("org.apache.commons/commons-lang3/3.1[0-9]*/*/commons-lang3-*.jar"))
+    newer_lang3 = sorted(bundled.glob("commons-lang3-3.*.jar")) if bundled.is_dir() else []
+    if not newer_lang3:
+        newer_lang3 = sorted(gradle.glob(
+            "org.apache.commons/commons-lang3/3.1[0-9]*/*/commons-lang3-*.jar"))
     if newer_lang3:
         artifacts["commons-lang3-"] = newer_lang3[-1]
 

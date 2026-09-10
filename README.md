@@ -102,3 +102,27 @@ Unsupported versions are rejected with a clear message rather than launched unpr
 Verified on Linux against MC Eternal. Windows code paths are written but have **not** been executed.
 Java 26 is located, not downloaded. See the measurement notes above for what is established and what
 is not.
+
+## Installing on another machine
+
+The Python here is the launcher; the Forge/LaunchWrapper builds and the ForgeFast coremod are
+binaries and ship as a release asset.
+
+1. Install **Java 26** and clone this repository.
+2. Download `fastforge-jars.zip` from
+   [Releases](https://github.com/ZaidQamhieh/fastforge/releases) and unpack it so the jars sit in
+   `launcher/jars/`. Verify them against `SHA256SUMS.txt` if you like.
+3. Launch your modpack **once in its normal launcher** so Forge and the libraries are installed.
+4. Then:
+
+```bash
+python3 launcher/ffl.py doctor              # every component should be listed, not "NOT BUILT"
+python3 launcher/ffl.py add "Pack" /path/to/pack
+python3 launcher/ffl.py optimize "Pack"     # or: play "Pack"
+```
+
+Copying a pack folder between machines is **not** enough on its own. The coremod and
+`forgefast.properties` live in the pack, but the Forge and LaunchWrapper builds and the
+`commons-lang3` replacement live in the shared Minecraft install, alongside the version JSONs that
+reference them. Without those, a Java 26 launch fails in `commons-lang3` 3.5. Run `optimize` on each
+machine instead — that is what it is for.
